@@ -1,5 +1,4 @@
-CFLAGS = -Wall -O3
-LDFLAGS = -lm -lfftw3
+LIBS := -lm -lfftw3
 DEBUG =
 D1 = 0
 D2 = 0
@@ -7,8 +6,11 @@ SUB =
 
 all: fftdiff interleave fftdiff_rect align
 
+%: %.c
+	$(CC) $(CFLAGS) $(LDFLAGS) $*.c $(LIBS) -o $*
+
 fftdiff_rect: fftdiff.c Makefile
-	$(CC) $(CFLAGS) $(LDFLAGS) fftdiff.c -o fftdiff_rect \
+	$(CC) $(CFLAGS) $(LDFLAGS) fftdiff.c $(LIBS) -o fftdiff_rect \
           -DPRESET -DCROSSFADE=crf_none -DWINDOW=win_rect -DTBUFSIZE=4096 -DPREBUFSIZE=1024 -DPOSTBUFSIZE=1024
 
 clean:
