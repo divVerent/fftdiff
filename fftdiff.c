@@ -110,7 +110,7 @@ void crf_none()
   for(i = 0; i != TBUFSIZE; ++i)
   {
     crossfading[i] =
-      (i < PREBUFSIZE || i >= PREBUFSIZE + BUFSIZE) ? 0 : 65535;
+      (i < PREBUFSIZE || i >= PREBUFSIZE + BUFSIZE) ? 0 : MAX_WINDATA;
   }
 }
 void crf_triangle()
