@@ -9,9 +9,13 @@
 
 #include <fftw3.h>
 
+#ifndef PRESET
 #define TBUFSIZE 8192
 #define PREBUFSIZE 3574
 #define POSTBUFSIZE 3574
+#define WINDOW win_blackman
+#endif
+
 #define BUFSIZE (TBUFSIZE - PREBUFSIZE - POSTBUFSIZE)
 #define FTBUFSIZE (TBUFSIZE / 2 + 1) 
 
@@ -215,8 +219,15 @@ void fftdiff(char *in1, off_t pos1, char *in2, off_t pos2, char *out)
 
 int main(int argc, char **argv)
 {
-  win_blackman();
+  if(argc != 6)
+  {
+    fprintf(stdout, "Usage: %s infile offset instrfile offset outfile\n", *argv);
+    fprintf(stdout, "  will remove the instruments from instrfile from infile and write the result to\n");
+    fprintf(stdout, "  outfile. File format: RAW, 16bit mono in host byte order.\n");
+    return 1;
+  }
+  WINDOW();
   win_check();
-  fftdiff("in1.raw", 24548, "in2.raw", 0, "out.raw");
+  fftdiff(argv[1], atol(argv[2]), argv[3], atol(argv[4]), argv[5]);
   return 0;
 }

@@ -15,4 +15,5 @@ int main(int argc, char **argv)
     fwrite(&i, 1, 2, of);
   }
   fclose(of);
+  return 0;
 }
