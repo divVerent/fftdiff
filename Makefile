@@ -5,14 +5,14 @@ D1 = 0
 D2 = 0
 SUB =
 
-all: fftdiff interleave fftdiff_rect
+all: fftdiff interleave fftdiff_rect align
 
-fftdiff_rect: fftdiff.c
+fftdiff_rect: fftdiff.c Makefile
 	$(CC) $(CFLAGS) $(LDFLAGS) fftdiff.c -o fftdiff_rect \
-          -DPRESET -DWINDOW=win_rect -DTBUFSIZE=4096 -DPREBUFSIZE=1024 -DPOSTBUFSIZE=1024
+          -DPRESET -DCROSSFADE=crf_none -DWINDOW=win_rect -DTBUFSIZE=4096 -DPREBUFSIZE=1024 -DPOSTBUFSIZE=1024
 
 clean:
-	rm -f fftdiff interleave
+	rm -f fftdiff interleave fftdiff_rect align
 
 test: fftdiff$(SUB) tdir/in1.raw tdir/in2.raw tdir/diff.raw
 	$(DEBUG) ./fftdiff$(SUB) tdir/in1.raw $(D1) tdir/in2.raw $(D2) tdir/out.raw

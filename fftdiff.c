@@ -9,20 +9,21 @@
 
 #include <fftw3.h>
 
+#include "types.h"
+
 #ifndef PRESET
 #define TBUFSIZE 8192
 #define PREBUFSIZE 3574
 #define POSTBUFSIZE 3574
 #define WINDOW win_blackman
+#define CROSSFADE crf_triangle
 #endif
 
-#define BUFSIZE (TBUFSIZE - PREBUFSIZE - POSTBUFSIZE)
-#define FTBUFSIZE (TBUFSIZE / 2 + 1) 
+#define MAXDEV 100
 
-typedef int16_t wavedata;
-typedef uint16_t windata;
-typedef int32_t wavwindata; /* must hold a product of these two */
-#define WINDATA_MAX 65535
+#define PBUFSIZE (PREBUFSIZE + POSTBUFSIZE)
+#define BUFSIZE (TBUFSIZE - PBUFSIZE)
+#define FTBUFSIZE (TBUFSIZE / 2 + 1) 
 
 typedef struct
 {
@@ -57,22 +58,23 @@ int infile_read(infile *f)
   else
   {
     /* 1. shift the data to the left */
-    memmove(f->buf, f->buf + BUFSIZE, (PREBUFSIZE + POSTBUFSIZE) * sizeof(f->buf[0]));
+    memmove(f->buf, f->buf + BUFSIZE, PBUFSIZE * sizeof(f->buf[0]));
     /* 2. read in the missing data */
-    nread = fread(f->buf + PREBUFSIZE + POSTBUFSIZE, 1, BUFSIZE * sizeof(f->buf[0]), f->data);
+    nread = fread(f->buf + PBUFSIZE, 1, BUFSIZE * sizeof(f->buf[0]), f->data);
   }
 
   return nread;
 }
 
 windata windowing[TBUFSIZE];
+windata crossfading[TBUFSIZE];
 void win_hanning()
 {
   size_t i;
   for(i = 0; i != TBUFSIZE; ++i)
   {
     double a = 2*M_PI*i/(TBUFSIZE - 1);
-    windowing[i] = (windata) (65534.0 * (0.5 - 0.5*cos(a))) + 1;
+    windowing[i] = (windata) ((MAX_WINDATA - 1.0) * (0.5 - 0.5*cos(a))) + 1;
   }
 }
 void win_blackman()
@@ -81,38 +83,100 @@ void win_blackman()
   for(i = 0; i != TBUFSIZE; ++i)
   {
     double a = 2*M_PI*i/(TBUFSIZE - 1);
-    windowing[i] = (windata) (65534.0 * (0.42 - 0.5*cos(a) + 0.08*cos(2*a))) + 1;
+    windowing[i] = (windata) ((MAX_WINDATA - 1.0) * (0.42 - 0.5*cos(a) + 0.08*cos(2*a))) + 1;
   }
 }
 void win_rect()
 {
   size_t i;
   for(i = 0; i != TBUFSIZE; ++i)
-    windowing[i] = 65535;
+    windowing[i] = MAX_WINDATA;
 }
 void win_check()
 {
-  int i;
-  windata min = WINDATA_MAX;
+  size_t i;
+  windata min = MAX_WINDATA;
   for(i = 0; i != TBUFSIZE; ++i)
   {
     if(i >= PREBUFSIZE && i < PREBUFSIZE + BUFSIZE)
       if(min > windowing[i])
         min = windowing[i];
   }
-  printf("windowing quality: %d\n", min);
+  printf("windowing quality: %u\n", (unsigned)min);
 }
+void crf_none()
+{
+  size_t i;
+  for(i = 0; i != TBUFSIZE; ++i)
+  {
+    crossfading[i] =
+      (i < PREBUFSIZE || i >= PREBUFSIZE + BUFSIZE) ? 0 : 65535;
+  }
+}
+void crf_triangle()
+{
+  size_t i;
+  const size_t left = PREBUFSIZE - BUFSIZE/2;
+  const size_t middle = PREBUFSIZE + BUFSIZE/2;
+  const size_t right = PREBUFSIZE + BUFSIZE + BUFSIZE/2;
+  for(i = 0; i != TBUFSIZE; ++i)
+  {
+    crossfading[i] =
+      (i <= left || i >= right) ? 0 :
+      (i <= middle) ? (i  - left) * (winwindata)MAX_WINDATA / (middle  - left) :
+      (i >  middle) ? (right - i) * (winwindata)MAX_WINDATA / (right - middle) :
+      -2342;
+  }
+}
+void crf_fix()
+{
+  size_t i, r;
+  for(r = 0; r != BUFSIZE; ++r)
+  {
+    winwindata s = 0;
+    windata S = MAX_WINDATA;
+    for(i = r; i < TBUFSIZE; i += BUFSIZE)
+    {
+      s += crossfading[i];
+    }
+    if(s == 0)
+      errx(1, "Your crossfading window is broken, fix it! at winpos %u", (unsigned)r);
+    if(s > S + MAXDEV || s + MAXDEV < S)
+      warnx("Your window seems to be broken, keep out of reach of children! %u != %u at %u", (unsigned)s, (unsigned)S, (unsigned)r);
+    for(i = r; i < TBUFSIZE && s; i += BUFSIZE)
+    {
+      wavwindata sold = s;
+      s -= crossfading[i];
+      crossfading[i] = (crossfading[i] * (winwindata)S) / sold;
+      S -= crossfading[i];
+    }
+    if(s != 0 || S != 0)
+      errx(1, "I am broken, please fix me. Now. %u vs. %u at winpos %d", (unsigned)s, (unsigned)S, r);
+  }
+}
+
+
 void buf_preprocess(wavedata buf[], wavedata obuf[])
 {
-  int i;
+  size_t i;
   for(i = 0; i != TBUFSIZE; ++i)
-    obuf[i] = (((wavwindata) buf[i]) * windowing[i]) / WINDATA_MAX;
+    obuf[i] = (((wavwindata) buf[i]) * windowing[i]) / MAX_WINDATA;
 }
 void buf_postprocess(wavedata buf[])
 {
-  int i;
+  size_t i;
   for(i = 0; i != TBUFSIZE; ++i)
-    buf[i] = (((wavwindata) buf[i]) * WINDATA_MAX) / windowing[i];
+    buf[i] = (((wavwindata) buf[i]) * MAX_WINDATA) / windowing[i];
+}
+void buf_crossfade(wavedata inbuf[], wavedata outbuf[])
+{
+  size_t i;
+  /* 1. Shift everything by BUFSIZE to the left. */
+  memmove(outbuf, outbuf + BUFSIZE, PBUFSIZE * sizeof(*outbuf));
+  memset(outbuf + PBUFSIZE, 0, BUFSIZE * sizeof(*outbuf));
+  /* 2. write the data to the new buffer */
+  for(i = 0; i != TBUFSIZE; ++i)
+    outbuf[i] += inbuf[i] * (wavwindata)crossfading[i] / MAX_WINDATA;
 }
 
 typedef struct
@@ -192,6 +256,7 @@ void fftdiff(char *in1, off_t pos1, char *in2, off_t pos2, char *out)
   wavedata buf[TBUFSIZE];
   wavedata ib1[TBUFSIZE];
   wavedata ib2[TBUFSIZE];
+  wavedata obuf[TBUFSIZE] = {0};
   infile *if1 = infile_open(in1, pos1);
   infile *if2 = infile_open(in2, pos2);
   FILE *of = fopen(out, "wb");
@@ -208,7 +273,8 @@ void fftdiff(char *in1, off_t pos1, char *in2, off_t pos2, char *out)
     buf_preprocess(if2->buf, ib2);
     buf_convolve(&f, ib1, ib2, buf);
     buf_postprocess(buf);
-    if(!fwrite(buf + PREBUFSIZE, 1, BUFSIZE * sizeof(buf[0]), of))
+    buf_crossfade(buf, obuf);
+    if(!fwrite(obuf, 1, BUFSIZE * sizeof(obuf[0]), of))
       err(1, "writing");
     putc('.', stderr);
   }
@@ -227,6 +293,8 @@ int main(int argc, char **argv)
     return 1;
   }
   WINDOW();
+  CROSSFADE();
+  crf_fix();
   win_check();
   fftdiff(argv[1], atol(argv[2]), argv[3], atol(argv[4]), argv[5]);
   return 0;
