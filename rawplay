@@ -1,0 +1,3 @@
+#!/bin/sh
+
+mplayer -rawaudio on:channels=1:rate=44100:samplesize=2 "$@"
