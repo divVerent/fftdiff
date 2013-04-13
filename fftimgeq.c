@@ -247,7 +247,7 @@ void fftdiff(char *in1, char *img, char *out)
 	wavedata ib1[TBUFSIZE];
 	wavedata ib2[TBUFSIZE];
 	wavedata obuf[TBUFSIZE] = {0};
-	unsigned char row[TBUFSIZE];
+	unsigned char row[FTBUFSIZE];
 	infile *if1 = infile_open(in1, 0);
 	FILE *imgf = fopen(img, "rb");
 	FILE *of = fopen(out, "wb");
@@ -276,7 +276,7 @@ void fftdiff(char *in1, char *img, char *out)
 	fclose(of);
 
 	putc('\n', stderr);
-	fprintf(stderr, "Total image size: %dx%d\n", TBUFSIZE, rows);
+	fprintf(stderr, "Total image size: %dx%d\n", FTBUFSIZE, rows);
 }
 
 int main(int argc, char **argv)
