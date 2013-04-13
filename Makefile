@@ -4,7 +4,7 @@ D1 = 0
 D2 = 0
 SUB =
 
-all: fftdiff interleave fftdiff_rect align
+all: fftdiff interleave fftdiff_rect fftimgeq align
 
 %: %.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $*.c $(LIBS) -o $*
