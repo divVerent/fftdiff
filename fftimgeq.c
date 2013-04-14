@@ -225,9 +225,9 @@ void w2d(wavedata in[], double out[])
 
 float rowmap(unsigned char x)
 {
-	// 0 -> 0
-	// 255 -> 1
-	return x / 255.0;
+	// 0 -> 0 ~ 2^-16
+	// 255 -> 2^0
+	return pow(2.0, (1.0 - x / 255.0) * -16.0);
 }
 
 void buf_process(fftdata *f, wavedata buf1[], unsigned char row[], wavedata obuf[])
