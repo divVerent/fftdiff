@@ -16,14 +16,14 @@ case "$a" in
 		merge=
 		;;
 	*)
-		c=`soxi -r "$a"`
+		c=`soxi -c "$a"`
 		r=`soxi -r "$a"`
-		i=0
+		k=0
 		channels=
-		while [ $i -lt $c ]; do
-			i=$(($i+1))
-			sox "$a" $rawspec "$i.raw" remix "$i"
-			channels="$channels $i.raw"
+		while [ $k -lt $c ]; do
+			k=$(($k+1))
+			sox "$a" $rawspec "$k.raw" remix "$k"
+			channels="$channels $k.raw"
 		done
 		if [ $c -gt 1 ]; then
 			merge=--combine=merge

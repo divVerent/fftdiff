@@ -25,6 +25,8 @@
 #define BUFSIZE (TBUFSIZE - PBUFSIZE)
 #define FTBUFSIZE (TBUFSIZE / 2 + 1) 
 
+#define TOTAL_DELAY (PREBUFSIZE + BUFSIZE)
+
 typedef struct
 {
 	FILE *data;
@@ -51,7 +53,8 @@ int infile_read(infile *f)
 	if(f->first)
 	{
 		/* 1. read in a full buffer */
-		nread = fread(f->buf, 1, sizeof(f->data), f->data);
+		memset(f->buf, 0, TBUFSIZE * sizeof(f->buf[0]));
+		nread = fread(f->buf + PREBUFSIZE + BUFSIZE, 1, POSTBUFSIZE * sizeof(f->buf[0]), f->data);
 		/* 2. never again */
 		f->first = 0;
 	}
@@ -60,6 +63,7 @@ int infile_read(infile *f)
 		/* 1. shift the data to the left */
 		memmove(f->buf, f->buf + BUFSIZE, PBUFSIZE * sizeof(f->buf[0]));
 		/* 2. read in the missing data */
+		memset(f->buf + PBUFSIZE, 0, BUFSIZE * sizeof(f->buf[0]));
 		nread = fread(f->buf + PBUFSIZE, 1, BUFSIZE * sizeof(f->buf[0]), f->data);
 	}
 
@@ -209,11 +213,13 @@ void fft_free(fftdata *d)
 	fftw_free(d->buf1);
 }
 
+#define bound(a,b,c) ((b)<(a)?(a):(b)>(c)?(c):(b))
+
 void d2w(double in[], wavedata out[])
 {
 	size_t i;
 	for(i = 0; i != TBUFSIZE; ++i)
-		out[i] = in[i] / TBUFSIZE;
+		out[i] = bound(MIN_WAVEDATA, in[i] / TBUFSIZE, MAX_WAVEDATA);
 }
 
 void w2d(wavedata in[], double out[])
@@ -252,6 +258,7 @@ void fftdiff(char *in1, char *img, char *out)
 	FILE *imgf = fopen(img, "rb");
 	FILE *of = fopen(out, "wb");
 	if(!of) err(1, "open output file");
+	size_t delaycount = TOTAL_DELAY;
 
 	fft_init(&f);
 	int rows = 0;
@@ -267,8 +274,19 @@ void fftdiff(char *in1, char *img, char *out)
 			memcpy(buf, ib1, sizeof(buf));
 		buf_postprocess(buf);
 		buf_crossfade(buf, obuf);
-		if(!fwrite(obuf, 1, BUFSIZE * sizeof(obuf[0]), of))
-			err(1, "writing");
+		if(delaycount == 0)
+		{
+			if(!fwrite(obuf, 1, BUFSIZE * sizeof(obuf[0]), of))
+				err(1, "writing");
+		}
+		else if(delaycount < BUFSIZE)
+		{
+			if(!fwrite(obuf + delaycount, 1, (BUFSIZE - delaycount) * sizeof(obuf[0]), of))
+				err(1, "writing");
+			delaycount = 0;
+		}
+		else
+			delaycount -= BUFSIZE;
 		putc('.', stderr);
 	}
 	fft_free(&f);
