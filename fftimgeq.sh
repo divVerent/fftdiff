@@ -4,10 +4,42 @@ a=$1
 i=$2
 b=$3
 
-r=44100 # TODO detect this
+rawspec="-t raw -e signed -b 16 -c 1"
 
-sox "$a" -e signed -b 16 -c 1 1.raw
-geometry=`./fftimgeq 1.raw /dev/null 2.raw 2>&1 | awk '/^Total image size:/ { print $4 }'`
-convert "$i" -flip -transpose -geometry "$geometry"! -depth 8 GRAY:- |\
-	./fftimgeq 1.raw /dev/stdin 2.raw
-sox -t raw -e signed -b 16 -c 1 -r "$r" 2.raw "$b"
+case "$a" in
+	"--synth="*)
+		synth=${a#*=}
+		r=${synth%% *}
+		s=${synth#* }
+		sox $rawspec -r "$r" -n $rawspec synth.raw synth $s
+		channels=synth.raw
+		merge=
+		;;
+	*)
+		c=`soxi -r "$a"`
+		r=`soxi -r "$a"`
+		i=0
+		channels=
+		while [ $i -lt $c ]; do
+			i=$(($i+1))
+			sox "$a" $rawspec "$i.raw" remix "$i"
+			channels="$channels $i.raw"
+		done
+		if [ $c -gt 1 ]; then
+			merge=--combine=merge
+		fi
+		;;
+esac
+
+geometry=
+set --
+for c in $channels; do
+	if [ -z "$geometry" ]; then
+		geometry=`./fftimgeq "$c" /dev/null /dev/null 2>&1 | tee /dev/stderr | awk '/^Total image size:/ { print $4 }'`
+	fi
+	convert "$i" -flip -transpose -geometry "$geometry"! -depth 8 -grayscale Rec601Luma GRAY:- | ./fftimgeq "$c" /dev/stdin "$c".out
+	set -- "$@" $rawspec -r "$r" "$c".out
+	out="$out $c.out"
+done
+
+sox $merge "$@" "$b"
