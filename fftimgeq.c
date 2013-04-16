@@ -12,9 +12,9 @@
 #include "types.h"
 
 #ifndef PRESET
-#define TBUFSIZE 8192
-#define PREBUFSIZE 3574
-#define POSTBUFSIZE 3574
+#define TBUFSIZE 4096
+#define PREBUFSIZE 1792
+#define POSTBUFSIZE 1792
 #define WINDOW win_blackman
 #define CROSSFADE crf_triangle
 #endif
